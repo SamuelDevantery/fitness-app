@@ -1,0 +1,15 @@
+{
+  "short_name": "Fitness",
+  "name": "Mon Programme Fitness",
+  "icons": [
+    {
+      "src": "favicon.ico",
+      "sizes": "64x64",
+      "type": "image/x-icon"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#0F0F13",
+  "background_color": "#0F0F13"
+}
