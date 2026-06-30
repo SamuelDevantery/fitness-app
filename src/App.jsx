@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"; 
+import { useState, useEffect } from "react";
 
 // ─── DATA ────────────────────────────────────────────────────────────────────
 
@@ -20,17 +20,17 @@ const DAYS = [
       { id: "d1e1", name: "Dév. couché haltères", type: "compound", basePoids: 32.5, unit: "kg/haltère", baseReps: 8 },
       { id: "d1e2", name: "Vertical Bench Press", type: "compound", basePoids: 27.5, machineWeight: 6.8, unit: "kg/côté", baseReps: 8, note: "+6.8 kg/côté machine" },
       { id: "d1e3", name: "Dév. militaire haltères", type: "compound", basePoids: 22.5, unit: "kg/haltère", baseReps: 8 },
-      { id: "d1e4", name: "Dips lestés", type: "compound", basePoids: 12.5, unit: "kg lest", baseReps: 8 },
-      { id: "d1e5", name: "Extensions triceps poulie", type: "isolation", basePoids: 18, unit: "kg (+2.3)", baseReps: 12 },
+      { id: "d1e4", name: "Dips lestés", type: "compound", basePoids: 12.5, unit: "kg lest", baseReps: 8, bodyweightBased: true },
+      { id: "d1e5", name: "Extensions triceps poulie", type: "isolation", basePoids: 18, unit: "kg", baseReps: 12, incrementUnit: 2.3 },
     ]
   },
   {
     id: 1, name: "Pull 1", muscles: "Dos · Biceps · Arrière épaule",
     exercises: [
-      { id: "d2e1", name: "Tractions pronation", type: "compound", basePoids: 12.5, unit: "kg lest", baseReps: 8 },
+      { id: "d2e1", name: "Tractions pronation", type: "compound", basePoids: 12.5, unit: "kg lest", baseReps: 8, bodyweightBased: true },
       { id: "d2e2", name: "Rowing barre courte", type: "compound", basePoids: 67.5, unit: "kg", baseReps: 8 },
       { id: "d2e3", name: "Reverse Butterfly", type: "isolation", basePoids: 52, unit: "kg", baseReps: 12 },
-      { id: "d2e4", name: "Curl biceps poulie", type: "isolation", basePoids: 41, unit: "kg (+2.3)", baseReps: 12 },
+      { id: "d2e4", name: "Curl biceps poulie", type: "isolation", basePoids: 41, unit: "kg", baseReps: 12, incrementUnit: 2.3 },
       { id: "d2e5", name: "Curl incliné haltères", type: "isolation", basePoids: 12.5, unit: "kg/haltère", baseReps: 10 },
     ]
   },
@@ -50,17 +50,17 @@ const DAYS = [
       { id: "d4e1", name: "Dév. militaire haltères", type: "compound", basePoids: 27.5, unit: "kg/haltère", baseReps: 8 },
       { id: "d4e2", name: "Élévations latérales", type: "isolation", basePoids: 12.5, unit: "kg", baseReps: 12 },
       { id: "d4e3", name: "Vertical Bench Press", type: "compound", basePoids: 27.5, machineWeight: 6.8, unit: "kg/côté", baseReps: 8, note: "+6.8 kg/côté machine" },
-      { id: "d4e4", name: "Dips lestés", type: "compound", basePoids: 12.5, unit: "kg lest", baseReps: 8 },
-      { id: "d4e5", name: "Extensions triceps poulie", type: "isolation", basePoids: 18, unit: "kg (+2.3)", baseReps: 12 },
+      { id: "d4e4", name: "Dips lestés", type: "compound", basePoids: 12.5, unit: "kg lest", baseReps: 8, bodyweightBased: true },
+      { id: "d4e5", name: "Extensions triceps poulie", type: "isolation", basePoids: 18, unit: "kg", baseReps: 12, incrementUnit: 2.3 },
     ]
   },
   {
     id: 4, name: "Pull 2", muscles: "Dos · Biceps · Arrière épaule",
     exercises: [
-      { id: "d5e1", name: "Tractions pronation", type: "compound", basePoids: 12.5, unit: "kg lest", baseReps: 8 },
-      { id: "d5e2", name: "Tirage horizontal poulie", type: "compound", basePoids: 45, unit: "kg (+2.3)", baseReps: 10 },
+      { id: "d5e1", name: "Tractions pronation", type: "compound", basePoids: 12.5, unit: "kg lest", baseReps: 8, bodyweightBased: true },
+      { id: "d5e2", name: "Tirage horizontal poulie", type: "compound", basePoids: 45, unit: "kg", baseReps: 10, incrementUnit: 2.3 },
       { id: "d5e3", name: "Reverse Butterfly", type: "isolation", basePoids: 52, unit: "kg", baseReps: 12 },
-      { id: "d5e4", name: "Curl biceps poulie", type: "isolation", basePoids: 41, unit: "kg (+2.3)", baseReps: 12 },
+      { id: "d5e4", name: "Curl biceps poulie", type: "isolation", basePoids: 41, unit: "kg", baseReps: 12, incrementUnit: 2.3 },
       { id: "d5e5", name: "Curl incliné haltères", type: "isolation", basePoids: 12.5, unit: "kg/haltère", baseReps: 12 },
     ]
   },
@@ -82,6 +82,21 @@ function calcWeight(basePoids, phaseIdx) {
   // basePoids is at 80% (phase 2 = Force)
   const base1RM = basePoids / 0.80;
   return Math.round((base1RM * PHASES[phaseIdx].pct) * 4) / 4; // round to 0.25
+}
+
+// For bodyweight-based exercises (pull-ups, dips):
+// basePoids = lest used at Force (3x8) reference. Total load at Force = bodyWeight + basePoids.
+// We scale the TOTAL load proportionally across phases, then subtract bodyWeight to get
+// the lest (positive) or assistance needed (negative) for each phase.
+function calcBodyweightLoad(basePoids, phaseIdx, bodyWeight) {
+  if (!bodyWeight) {
+    return { totalLoad: null, lest: calcWeight(basePoids, phaseIdx), isAssisted: false };
+  }
+  const totalAtForce = bodyWeight + basePoids;
+  const total1RM = totalAtForce / 0.80;
+  const totalLoad = Math.round((total1RM * PHASES[phaseIdx].pct) * 4) / 4;
+  const lest = Math.round((totalLoad - bodyWeight) * 4) / 4;
+  return { totalLoad, lest, isAssisted: lest < 0 };
 }
 
 // ─── STORAGE HELPERS ─────────────────────────────────────────────────────────
@@ -145,6 +160,7 @@ export default function FitnessApp() {
   const [showWeightModal, setShowWeightModal] = useState(false);
   const [weightInput, setWeightInput] = useState("");
   const [lastWeighInCycleStart, setLastWeighInCycleStart] = useState(null);
+  const [increments, setIncrements] = useState({}); // { exId: 0 | 1 | 2 } number of 2.3kg increments added
 
   // Load from storage on mount
   useEffect(() => {
@@ -158,6 +174,7 @@ export default function FitnessApp() {
       setSessionLog(saved.sessionLog || {});
       setBodyWeights(saved.bodyWeights || []);
       setLastWeighInCycleStart(saved.lastWeighInCycleStart || null);
+      setIncrements(saved.increments || {});
     } else {
       setWeights(buildInitialWeights());
       setCycleStart(buildInitialStart());
@@ -168,8 +185,8 @@ export default function FitnessApp() {
   // Save on change
   useEffect(() => {
     if (!initialized) return;
-    saveState({ weights, cycleStart, pausedWeeks, pauseActive, pauseStartDate, sessionLog, bodyWeights, lastWeighInCycleStart });
-  }, [weights, cycleStart, pausedWeeks, pauseActive, pauseStartDate, sessionLog, bodyWeights, lastWeighInCycleStart, initialized]);
+    saveState({ weights, cycleStart, pausedWeeks, pauseActive, pauseStartDate, sessionLog, bodyWeights, lastWeighInCycleStart, increments });
+  }, [weights, cycleStart, pausedWeeks, pauseActive, pauseStartDate, sessionLog, bodyWeights, lastWeighInCycleStart, increments, initialized]);
 
   // Compute current phase
   function getCurrentPhase() {
@@ -790,10 +807,175 @@ export default function FitnessApp() {
 
   function renderExercise(ex) {
     const userWeight = weights[ex.id] ?? ex.basePoids;
-    const phaseWeight = calcWeight(userWeight, phaseIdx);
-    const reps = getReps(phaseIdx, ex.type, ex.baseReps);
     const isEditing = editingEx?.id === ex.id;
     const machineW = ex.machineWeight || 0;
+    const reps = getReps(phaseIdx, ex.type, ex.baseReps);
+
+    // Bodyweight-based exercise (pull-ups, dips)
+    if (ex.bodyweightBased) {
+      const latestW = getLatestWeight();
+      const bodyKg = latestW ? latestW.kg : null;
+      const { totalLoad, lest, isAssisted } = calcBodyweightLoad(userWeight, phaseIdx, bodyKg);
+
+      return (
+        <div key={ex.id} style={styles.exCard}>
+          <div style={styles.exHeader}>
+            <span style={styles.exName}>{ex.name}</span>
+            <span style={styles.exType(ex.type)}>
+              {ex.type === "compound" ? "POLY" : "ISO"}
+            </span>
+          </div>
+          <div style={styles.exRow}>
+            <div style={styles.exPill(phase.color)}>
+              3 × {reps}
+            </div>
+            <div>
+              {!bodyKg ? (
+                <>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: "#FF9444" }}>
+                    Pèse-toi d'abord
+                  </div>
+                  <div style={styles.exUnit}>
+                    Pour un calcul juste (poids du corps + lest)
+                  </div>
+                </>
+              ) : isAssisted ? (
+                <>
+                  <div style={{ fontSize: 16, fontWeight: 800, color: "#4ECDC4" }}>
+                    -{Math.abs(lest)} kg assistance
+                  </div>
+                  <div style={styles.exUnit}>
+                    Charge totale {totalLoad} kg · utilise la machine assistée
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div style={{ fontSize: 16, fontWeight: 800, color: "#F0EEF6" }}>
+                    {lest} kg lest
+                  </div>
+                  <div style={styles.exUnit}>
+                    Charge totale {totalLoad} kg (corps {bodyKg} + lest)
+                  </div>
+                </>
+              )}
+            </div>
+            <div style={{ marginLeft: "auto", textAlign: "right" }}>
+              <div style={{ fontSize: 11, color: "#9997A8" }}>Lest base (3×8)</div>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>{userWeight} kg</div>
+            </div>
+          </div>
+
+          {!bodyKg && (
+            <button
+              style={{ ...styles.updateBtn, color: "#FF9444", borderColor: "#FF944444" }}
+              onClick={() => setShowWeightModal(true)}
+            >
+              ⚖️ Enregistrer mon poids
+            </button>
+          )}
+
+          {isEditing ? (
+            <div style={styles.editRow}>
+              <span style={styles.editLabel}>Nouveau lest (3×8) :</span>
+              <input
+                style={styles.editInput}
+                type="number"
+                step="0.5"
+                value={editingEx.value}
+                onChange={e => setEditingEx(prev => ({ ...prev, value: e.target.value }))}
+                autoFocus
+              />
+              <button style={styles.editBtn(true)} onClick={commitEdit}>✓</button>
+              <button style={styles.editBtn(false)} onClick={() => setEditingEx(null)}>✕</button>
+            </div>
+          ) : (
+            <button style={styles.updateBtn} onClick={() => startEdit(ex.id, userWeight)}>
+              ✏️ Mettre à jour mon lest
+            </button>
+          )}
+        </div>
+      );
+    }
+
+    // Exercise with increment option (e.g. machine with +2.3kg add-on)
+    if (ex.incrementUnit) {
+      const phaseWeight = calcWeight(userWeight, phaseIdx);
+      const incCount = increments[ex.id] || 0;
+      const finalWeight = Math.round((phaseWeight + incCount * ex.incrementUnit) * 4) / 4;
+
+      return (
+        <div key={ex.id} style={styles.exCard}>
+          <div style={styles.exHeader}>
+            <span style={styles.exName}>{ex.name}</span>
+            <span style={styles.exType(ex.type)}>
+              {ex.type === "compound" ? "POLY" : "ISO"}
+            </span>
+          </div>
+          <div style={styles.exRow}>
+            <div style={styles.exPill(phase.color)}>
+              3 × {reps}
+            </div>
+            <div>
+              <div style={{ fontSize: 16, fontWeight: 800, color: "#F0EEF6" }}>
+                {finalWeight} kg
+              </div>
+              <div style={styles.exUnit}>
+                {ex.unit}{incCount > 0 ? ` + ${incCount}×${ex.incrementUnit}kg` : ""}
+              </div>
+            </div>
+            <div style={{ marginLeft: "auto", textAlign: "right" }}>
+              <div style={{ fontSize: 11, color: "#9997A8" }}>Votre base</div>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>{userWeight} kg</div>
+            </div>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, paddingTop: 10, borderTop: "1px solid #2A2A35" }}>
+            <span style={{ fontSize: 12, color: "#9997A8", flex: 1 }}>Incréments machine (+{ex.incrementUnit}kg)</span>
+            {[0, 1, 2].map(n => (
+              <button
+                key={n}
+                onClick={() => setIncrements(prev => ({ ...prev, [ex.id]: n }))}
+                style={{
+                  background: incCount === n ? phase.color : "#0F0F13",
+                  color: incCount === n ? "#0F0F13" : "#F0EEF6",
+                  border: `1px solid ${incCount === n ? phase.color : "#2A2A35"}`,
+                  borderRadius: 8,
+                  padding: "5px 11px",
+                  fontWeight: 700,
+                  fontSize: 12,
+                  cursor: "pointer",
+                }}
+              >
+                {n === 0 ? "0" : `+${n}`}
+              </button>
+            ))}
+          </div>
+
+          {isEditing ? (
+            <div style={styles.editRow}>
+              <span style={styles.editLabel}>Nouveau poids (3×8) :</span>
+              <input
+                style={styles.editInput}
+                type="number"
+                step="0.5"
+                value={editingEx.value}
+                onChange={e => setEditingEx(prev => ({ ...prev, value: e.target.value }))}
+                autoFocus
+              />
+              <button style={styles.editBtn(true)} onClick={commitEdit}>✓</button>
+              <button style={styles.editBtn(false)} onClick={() => setEditingEx(null)}>✕</button>
+            </div>
+          ) : (
+            <button style={styles.updateBtn} onClick={() => startEdit(ex.id, userWeight)}>
+              ✏️ Mettre à jour mon poids
+            </button>
+          )}
+        </div>
+      );
+    }
+
+    // Default rendering (unchanged)
+    const phaseWeight = calcWeight(userWeight, phaseIdx);
     const totalDisplay = ex.machineWeight
       ? `${phaseWeight} + ${machineW}${ex.id === "d1e2" || ex.id === "d4e3" ? " kg/côté" : " kg"} machine`
       : null;
