@@ -21,7 +21,7 @@ const DAYS = [
       { id: "d1e2", name: "Vertical Bench Press", type: "compound", basePoids: 27.5, machineWeight: 6.8, unit: "kg/côté", baseReps: 8, note: "+6.8 kg/côté machine" },
       { id: "d1e3", name: "Dév. militaire haltères", type: "compound", basePoids: 22.5, unit: "kg/haltère", baseReps: 8 },
       { id: "d1e4", name: "Dips lestés", type: "compound", basePoids: 12.5, unit: "kg lest", baseReps: 8, bodyweightBased: true },
-      { id: "d1e5", name: "Extensions triceps poulie", type: "isolation", basePoids: 18, unit: "kg", baseReps: 12, incrementUnit: 2.3 },
+      { id: "d1e5", name: "Extensions triceps poulie", type: "isolation", basePoids: 18, unit: "kg", baseReps: 12 },
     ]
   },
   {
@@ -30,7 +30,7 @@ const DAYS = [
       { id: "d2e1", name: "Tractions pronation", type: "compound", basePoids: 12.5, unit: "kg lest", baseReps: 8, bodyweightBased: true },
       { id: "d2e2", name: "Rowing barre courte", type: "compound", basePoids: 67.5, unit: "kg", baseReps: 8 },
       { id: "d2e3", name: "Reverse Butterfly", type: "isolation", basePoids: 52, unit: "kg", baseReps: 12 },
-      { id: "d2e4", name: "Curl biceps poulie", type: "isolation", basePoids: 41, unit: "kg", baseReps: 12, incrementUnit: 2.3 },
+      { id: "d2e4", name: "Curl biceps poulie", type: "isolation", basePoids: 41, unit: "kg", baseReps: 12 },
       { id: "d2e5", name: "Curl incliné haltères", type: "isolation", basePoids: 12.5, unit: "kg/haltère", baseReps: 10 },
     ]
   },
@@ -51,16 +51,16 @@ const DAYS = [
       { id: "d4e2", name: "Élévations latérales", type: "isolation", basePoids: 12.5, unit: "kg", baseReps: 12 },
       { id: "d4e3", name: "Vertical Bench Press", type: "compound", basePoids: 27.5, machineWeight: 6.8, unit: "kg/côté", baseReps: 8, note: "+6.8 kg/côté machine" },
       { id: "d4e4", name: "Dips lestés", type: "compound", basePoids: 12.5, unit: "kg lest", baseReps: 8, bodyweightBased: true },
-      { id: "d4e5", name: "Extensions triceps poulie", type: "isolation", basePoids: 18, unit: "kg", baseReps: 12, incrementUnit: 2.3 },
+      { id: "d4e5", name: "Extensions triceps poulie", type: "isolation", basePoids: 18, unit: "kg", baseReps: 12 },
     ]
   },
   {
     id: 4, name: "Pull 2", muscles: "Dos · Biceps · Arrière épaule",
     exercises: [
       { id: "d5e1", name: "Tractions pronation", type: "compound", basePoids: 12.5, unit: "kg lest", baseReps: 8, bodyweightBased: true },
-      { id: "d5e2", name: "Tirage horizontal poulie", type: "compound", basePoids: 45, unit: "kg", baseReps: 10, incrementUnit: 2.3 },
+      { id: "d5e2", name: "Tirage horizontal poulie", type: "compound", basePoids: 45, unit: "kg", baseReps: 10 },
       { id: "d5e3", name: "Reverse Butterfly", type: "isolation", basePoids: 52, unit: "kg", baseReps: 12 },
-      { id: "d5e4", name: "Curl biceps poulie", type: "isolation", basePoids: 41, unit: "kg", baseReps: 12, incrementUnit: 2.3 },
+      { id: "d5e4", name: "Curl biceps poulie", type: "isolation", basePoids: 41, unit: "kg", baseReps: 12 },
       { id: "d5e5", name: "Curl incliné haltères", type: "isolation", basePoids: 12.5, unit: "kg/haltère", baseReps: 12 },
     ]
   },
@@ -159,8 +159,16 @@ export default function FitnessApp() {
   const [bodyWeights, setBodyWeights] = useState([]); // [{ date, kg }]
   const [showWeightModal, setShowWeightModal] = useState(false);
   const [weightInput, setWeightInput] = useState("");
-  const [lastWeighInCycleStart, setLastWeighInCycleStart] = useState(null);
-  const [increments, setIncrements] = useState({}); // { exId: 0 | 1 | 2 } number of 2.3kg increments added
+  const [lastWeighInCycleCount, setLastWeighInCycleCount] = useState(0);
+  const [exerciseOverrides, setExerciseOverrides] = useState({}); // { exId: { name?, type?, bodyweightBased? } }
+  const [programMode, setProgramMode] = useState("periodized"); // "periodized" | "fixed3x8"
+  const [sessionsPerPhase, setSessionsPerPhase] = useState(3); // per day-type, to advance phase
+  const [phaseIdx, setPhaseIdx] = useState(0);
+  const [phaseSessionCounts, setPhaseSessionCounts] = useState({ 0: 0, 1: 0, 2: 0, 3: 0, 4: 0 });
+  const [cyclesCompleted, setCyclesCompleted] = useState(0);
+  const [weightHistory, setWeightHistory] = useState([]); // [{ exId, date, oldVal, newVal }]
+  const [overloadHandled, setOverloadHandled] = useState({}); // { dayIdx: lastConsideredDateKey }
+  const [statsExId, setStatsExId] = useState(null); // exercise selected in the progression chart
 
   // Load from storage on mount
   useEffect(() => {
@@ -173,8 +181,23 @@ export default function FitnessApp() {
       setPauseStartDate(saved.pauseStartDate || null);
       setSessionLog(saved.sessionLog || {});
       setBodyWeights(saved.bodyWeights || []);
-      setLastWeighInCycleStart(saved.lastWeighInCycleStart || null);
-      setIncrements(saved.increments || {});
+      setLastWeighInCycleCount(saved.lastWeighInCycleCount ?? 0);
+      setExerciseOverrides(saved.exerciseOverrides || {});
+      setProgramMode(saved.programMode || "periodized");
+      setSessionsPerPhase(saved.sessionsPerPhase || 3);
+      if (saved.phaseIdx !== undefined) {
+        setPhaseIdx(saved.phaseIdx);
+      } else if (saved.cycleStart) {
+        // One-time migration: keep the phase the old date-based system had you in
+        const diffDays = Math.max(0, Math.floor((Date.now() - new Date(saved.cycleStart)) / 86400000));
+        const eff = diffDays - (saved.pausedWeeks || 0) * 7;
+        const dayInCycle = ((eff % 84) + 84) % 84;
+        setPhaseIdx(Math.min(3, Math.floor(Math.floor(dayInCycle / 7) / 3)));
+      }
+      setPhaseSessionCounts(saved.phaseSessionCounts || { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0 });
+      setCyclesCompleted(saved.cyclesCompleted || 0);
+      setWeightHistory(saved.weightHistory || []);
+      setOverloadHandled(saved.overloadHandled || {});
     } else {
       setWeights(buildInitialWeights());
       setCycleStart(buildInitialStart());
@@ -185,60 +208,60 @@ export default function FitnessApp() {
   // Save on change
   useEffect(() => {
     if (!initialized) return;
-    saveState({ weights, cycleStart, pausedWeeks, pauseActive, pauseStartDate, sessionLog, bodyWeights, lastWeighInCycleStart, increments });
-  }, [weights, cycleStart, pausedWeeks, pauseActive, pauseStartDate, sessionLog, bodyWeights, lastWeighInCycleStart, increments, initialized]);
+    saveState({
+      weights, cycleStart, pausedWeeks, pauseActive, pauseStartDate, sessionLog, bodyWeights,
+      lastWeighInCycleCount, exerciseOverrides, programMode, sessionsPerPhase, phaseIdx,
+      phaseSessionCounts, cyclesCompleted, weightHistory, overloadHandled,
+    });
+  }, [weights, cycleStart, pausedWeeks, pauseActive, pauseStartDate, sessionLog, bodyWeights,
+      lastWeighInCycleCount, exerciseOverrides, programMode, sessionsPerPhase, phaseIdx,
+      phaseSessionCounts, cyclesCompleted, weightHistory, overloadHandled, initialized]);
 
-  // Compute current phase
-  function getCurrentPhase() {
-    if (!cycleStart) return 0;
-    const start = new Date(cycleStart);
-    const now = new Date();
-    const diffMs = now - start;
-    const diffDays = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
-    const effectiveDays = diffDays - pausedWeeks * 7;
-    const totalCycleDays = 12 * 7;
-    const dayInCycle = effectiveDays % totalCycleDays;
-    const weekInCycle = Math.floor(dayInCycle / 7);
-    return Math.min(3, Math.floor(weekInCycle / 3));
+  // ─── SESSION-BASED PHASE PROGRESSION ─────────────────────────────────────
+  // A phase advances once each of the 5 day-types has been validated
+  // `sessionsPerPhase` times (default 3 → 15 sessions total, e.g. Push/Pull/Legs/Push/Pull x3).
+  const effectivePhaseIdx = programMode === "fixed3x8" ? 2 : phaseIdx;
+  const phase = PHASES[effectivePhaseIdx];
+
+  function remainingByDay() {
+    return [0, 1, 2, 3, 4].map(i => Math.max(0, sessionsPerPhase - (phaseSessionCounts[i] || 0)));
   }
 
-  function getWeekInPhase() {
-    if (!cycleStart) return 1;
-    const start = new Date(cycleStart);
-    const now = new Date();
-    const diffDays = Math.max(0, Math.floor((now - start) / (1000 * 60 * 60 * 24)));
-    const effectiveDays = diffDays - pausedWeeks * 7;
-    const totalCycleDays = 12 * 7;
-    const dayInCycle = effectiveDays % totalCycleDays;
-    const weekInCycle = Math.floor(dayInCycle / 7);
-    return (weekInCycle % 3) + 1;
+  function totalRemaining() {
+    return remainingByDay().reduce((a, b) => a + b, 0);
   }
-
-  function getNextPhaseDate() {
-    if (!cycleStart) return null;
-    const start = new Date(cycleStart);
-    const now = new Date();
-    const diffDays = Math.max(0, Math.floor((now - start) / (1000 * 60 * 60 * 24)));
-    const effectiveDays = diffDays - pausedWeeks * 7;
-    const totalCycleDays = 12 * 7;
-    const dayInCycle = effectiveDays % totalCycleDays;
-    const weekInCycle = Math.floor(dayInCycle / 7);
-    const nextPhaseWeek = (Math.floor(weekInCycle / 3) + 1) * 3;
-    const daysUntil = (nextPhaseWeek * 7) - dayInCycle + pausedWeeks * 7;
-    const next = new Date(start);
-    next.setDate(next.getDate() + daysUntil);
-    return next;
-  }
-
-  const phaseIdx = getCurrentPhase();
-  const phase = PHASES[phaseIdx];
-  const weekInPhase = getWeekInPhase();
-  const nextDate = getNextPhaseDate();
 
   function daysUntilNext() {
-    if (!nextDate) return 0;
-    const diff = Math.ceil((nextDate - new Date()) / (1000 * 60 * 60 * 24));
-    return Math.max(0, diff);
+    // Rough estimate only (5 sessions/week nominal pace) — used just for an optional calendar entry
+    const remaining = totalRemaining();
+    return Math.ceil((remaining / 5) * 7);
+  }
+
+  function getEstimatedNextPhaseDate() {
+    if (programMode === "fixed3x8") return null;
+    const d = new Date();
+    d.setDate(d.getDate() + daysUntilNext());
+    return d;
+  }
+
+  const nextDate = getEstimatedNextPhaseDate();
+
+  // Called after a session is validated with a day index — advances the phase when complete
+  function registerSessionForPhaseProgress(dayIdx) {
+    if (programMode === "fixed3x8" || dayIdx == null) return;
+    setPhaseSessionCounts(prev => {
+      const next = { ...prev, [dayIdx]: (prev[dayIdx] || 0) + 1 };
+      const allDone = [0, 1, 2, 3, 4].every(i => (next[i] || 0) >= sessionsPerPhase);
+      if (allDone) {
+        setPhaseIdx(p => {
+          const newPhase = (p + 1) % 4;
+          if (newPhase === 0) setCyclesCompleted(c => c + 1);
+          return newPhase;
+        });
+        return { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0 };
+      }
+      return next;
+    });
   }
 
   function formatDate(d) {
@@ -283,6 +306,7 @@ export default function FitnessApp() {
 
   function confirmSessionRating(rating) {
     const now = new Date();
+    const existing = sessionLog[sessionModalDate];
     setSessionLog(prev => ({
       ...prev,
       [sessionModalDate]: {
@@ -291,32 +315,41 @@ export default function FitnessApp() {
         time: now.toISOString(),
       }
     }));
+    if (!existing) {
+      registerSessionForPhaseProgress(sessionModalDayIdx);
+    } else if (existing.dayIdx !== sessionModalDayIdx) {
+      setPhaseSessionCounts(prev => ({ ...prev, [existing.dayIdx]: Math.max(0, (prev[existing.dayIdx] || 0) - 1) }));
+      registerSessionForPhaseProgress(sessionModalDayIdx);
+    }
     setShowSessionModal(false);
     setSessionModalStep("pickDay");
   }
 
   function deleteSession() {
+    const existing = sessionLog[sessionModalDate];
     setSessionLog(prev => {
       const next = { ...prev };
       delete next[sessionModalDate];
       return next;
     });
+    if (existing && existing.dayIdx != null && programMode !== "fixed3x8") {
+      setPhaseSessionCounts(prev => ({ ...prev, [existing.dayIdx]: Math.max(0, (prev[existing.dayIdx] || 0) - 1) }));
+    }
     setShowSessionModal(false);
     setSessionModalStep("pickDay");
   }
 
-  // ─── BODY WEIGHT TRACKING (re-weigh reminder every 12-week cycle) ────────
+  // ─── BODY WEIGHT TRACKING (re-weigh reminder every completed 12-week-equivalent cycle) ──
   function needsWeighIn() {
-    if (!cycleStart) return false;
-    // If never weighed, or last weigh-in cycle marker differs from current cycleStart, prompt
-    return lastWeighInCycleStart !== cycleStart;
+    if (programMode === "fixed3x8") return bodyWeights.length === 0;
+    return lastWeighInCycleCount !== cyclesCompleted;
   }
 
   function logBodyWeight(kg) {
     const val = parseFloat(kg);
     if (isNaN(val) || val <= 0) return;
     setBodyWeights(prev => [...prev, { date: new Date().toISOString(), kg: val }]);
-    setLastWeighInCycleStart(cycleStart);
+    setLastWeighInCycleCount(cyclesCompleted);
     setWeightInput("");
     setShowWeightModal(false);
   }
@@ -326,14 +359,28 @@ export default function FitnessApp() {
     return bodyWeights[bodyWeights.length - 1];
   }
 
+  // Merge a base exercise definition with any user customization (name, type, bodyweightBased)
+  function getExerciseDef(ex) {
+    const override = exerciseOverrides[ex.id];
+    if (!override) return ex;
+    return { ...ex, ...override };
+  }
+
+  function updateExerciseOverride(exId, patch) {
+    setExerciseOverrides(prev => ({
+      ...prev,
+      [exId]: { ...(prev[exId] || {}), ...patch },
+    }));
+  }
+
   // Calendar event URL
   function getCalendarUrl() {
     if (!nextDate) return "#";
     const start = nextDate.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
     const end = new Date(nextDate.getTime() + 60 * 60 * 1000).toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
-    const nextPhase = PHASES[(phaseIdx + 1) % 4];
-    const title = encodeURIComponent(`💪 Changement phase fitness → ${nextPhase.name}`);
-    const details = encodeURIComponent(`Passe en phase ${nextPhase.name} (${Math.round(nextPhase.pct * 100)}% du max). Ouvre ton app fitness pour les nouveaux poids.`);
+    const nextPhase = PHASES[(effectivePhaseIdx + 1) % 4];
+    const title = encodeURIComponent(`💪 (estimation) Changement phase fitness → ${nextPhase.name}`);
+    const details = encodeURIComponent(`Estimation basée sur ton rythme habituel — vérifie dans l'app si tu es prêt à passer en phase ${nextPhase.name} (${Math.round(nextPhase.pct * 100)}% du max).`);
     return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${start}/${end}&details=${details}`;
   }
 
@@ -346,9 +393,101 @@ export default function FitnessApp() {
     if (!editingEx) return;
     const val = parseFloat(editingEx.value);
     if (!isNaN(val) && val > 0) {
+      const oldVal = weights[editingEx.id];
       setWeights(prev => ({ ...prev, [editingEx.id]: val }));
+      if (oldVal !== val) {
+        setWeightHistory(prev => [...prev, { exId: editingEx.id, date: new Date().toISOString(), oldVal, newVal: val }]);
+      }
     }
     setEditingEx(null);
+  }
+
+  // ─── OVERLOAD SUGGESTION (autoregulation by perceived difficulty) ───────
+  // If the last 2 logged sessions for a given day-type were both rated "easy" (1-2 stars),
+  // suggest a modest load increase (~2.5%) for that day's exercises.
+  function getLowDifficultyFlag(dayIdx) {
+    const entries = Object.entries(sessionLog)
+      .filter(([, e]) => e.dayIdx === dayIdx && e.rating != null)
+      .sort((a, b) => new Date(b[0]) - new Date(a[0]));
+    if (entries.length < 2) return null;
+    const lastTwo = entries.slice(0, 2);
+    const allLow = lastTwo.every(([, e]) => e.rating <= 2);
+    if (!allLow) return null;
+    const mostRecentKey = lastTwo[0][0];
+    if (overloadHandled[dayIdx] === mostRecentKey) return null;
+    return mostRecentKey;
+  }
+
+  function overloadSuggestionFor(dayIdx) {
+    return getLowDifficultyFlag(dayIdx);
+  }
+
+  function applyDayOverload(dayIdx, apply) {
+    const mostRecentKey = getLowDifficultyFlag(dayIdx);
+    if (apply) {
+      const day = DAYS[dayIdx];
+      const now = new Date().toISOString();
+      const updatedWeights = { ...weights };
+      const historyEntries = [];
+      day.exercises.forEach(ex => {
+        const old = weights[ex.id] ?? ex.basePoids;
+        const updated = Math.round(old * 1.025 * 4) / 4;
+        updatedWeights[ex.id] = updated;
+        historyEntries.push({ exId: ex.id, date: now, oldVal: old, newVal: updated });
+      });
+      setWeights(updatedWeights);
+      setWeightHistory(prev => [...prev, ...historyEntries]);
+    }
+    if (mostRecentKey) {
+      setOverloadHandled(prev => ({ ...prev, [dayIdx]: mostRecentKey }));
+    }
+  }
+
+  function renderOverloadBanner(dayIdx) {
+    return (
+      <div style={{ background: "#16241A", border: "1px solid #4ECDC444", borderRadius: 12, padding: "14px 16px", marginBottom: 12 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: "#4ECDC4", marginBottom: 4 }}>💡 Ça semble facile</div>
+        <div style={{ fontSize: 12, color: "#9997A8", marginBottom: 10, lineHeight: 1.5 }}>
+          Les 2 dernières séances de {DAYS[dayIdx].name} étaient notées faciles (1-2★). D'après la littérature sur l'autorégulation (RPE), c'est le signal pour augmenter la charge.
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={() => applyDayOverload(dayIdx, true)} style={{ ...styles.calBtn, flex: 1, textAlign: "center", padding: "10px" }}>
+            Augmenter de 2.5%
+          </button>
+          <button onClick={() => applyDayOverload(dayIdx, false)} style={{ background: "none", border: "1px solid #2A2A35", color: "#9997A8", borderRadius: 8, padding: "10px", fontSize: 13, cursor: "pointer" }}>
+            Ignorer
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── EXPORT / IMPORT ──────────────────────────────────────────────────────
+  function exportData() {
+    const data = loadState() || {};
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `fitness-backup-${new Date().toISOString().split("T")[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  function importData(file) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = JSON.parse(e.target.result);
+        saveState(data);
+        window.location.reload();
+      } catch {
+        alert("Fichier invalide — impossible d'importer ces données.");
+      }
+    };
+    reader.readAsText(file);
   }
 
   // Pause
@@ -372,9 +511,9 @@ export default function FitnessApp() {
   }
 
   function resetCycle() {
-    if (window.confirm("Recommencer un nouveau cycle de 12 semaines ?")) {
-      setCycleStart(new Date().toISOString());
-      setPausedWeeks(0);
+    if (window.confirm("Revenir à la phase Endurance ? (tes stats et poids sont conservés)")) {
+      setPhaseIdx(0);
+      setPhaseSessionCounts({ 0: 0, 1: 0, 2: 0, 3: 0, 4: 0 });
       setPauseActive(false);
       setPauseStartDate(null);
     }
@@ -809,13 +948,13 @@ export default function FitnessApp() {
     const userWeight = weights[ex.id] ?? ex.basePoids;
     const isEditing = editingEx?.id === ex.id;
     const machineW = ex.machineWeight || 0;
-    const reps = getReps(phaseIdx, ex.type, ex.baseReps);
+    const reps = getReps(effectivePhaseIdx, ex.type, ex.baseReps);
 
     // Bodyweight-based exercise (pull-ups, dips)
     if (ex.bodyweightBased) {
       const latestW = getLatestWeight();
       const bodyKg = latestW ? latestW.kg : null;
-      const { totalLoad, lest, isAssisted } = calcBodyweightLoad(userWeight, phaseIdx, bodyKg);
+      const { totalLoad, lest, isAssisted } = calcBodyweightLoad(userWeight, effectivePhaseIdx, bodyKg);
 
       return (
         <div key={ex.id} style={styles.exCard}>
@@ -897,85 +1036,8 @@ export default function FitnessApp() {
       );
     }
 
-    // Exercise with increment option (e.g. machine with +2.3kg add-on)
-    if (ex.incrementUnit) {
-      const phaseWeight = calcWeight(userWeight, phaseIdx);
-      const incCount = increments[ex.id] || 0;
-      const finalWeight = Math.round((phaseWeight + incCount * ex.incrementUnit) * 4) / 4;
-
-      return (
-        <div key={ex.id} style={styles.exCard}>
-          <div style={styles.exHeader}>
-            <span style={styles.exName}>{ex.name}</span>
-            <span style={styles.exType(ex.type)}>
-              {ex.type === "compound" ? "POLY" : "ISO"}
-            </span>
-          </div>
-          <div style={styles.exRow}>
-            <div style={styles.exPill(phase.color)}>
-              3 × {reps}
-            </div>
-            <div>
-              <div style={{ fontSize: 16, fontWeight: 800, color: "#F0EEF6" }}>
-                {finalWeight} kg
-              </div>
-              <div style={styles.exUnit}>
-                {ex.unit}{incCount > 0 ? ` + ${incCount}×${ex.incrementUnit}kg` : ""}
-              </div>
-            </div>
-            <div style={{ marginLeft: "auto", textAlign: "right" }}>
-              <div style={{ fontSize: 11, color: "#9997A8" }}>Votre base</div>
-              <div style={{ fontSize: 13, fontWeight: 600 }}>{userWeight} kg</div>
-            </div>
-          </div>
-
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, paddingTop: 10, borderTop: "1px solid #2A2A35" }}>
-            <span style={{ fontSize: 12, color: "#9997A8", flex: 1 }}>Incréments machine (+{ex.incrementUnit}kg)</span>
-            {[0, 1, 2].map(n => (
-              <button
-                key={n}
-                onClick={() => setIncrements(prev => ({ ...prev, [ex.id]: n }))}
-                style={{
-                  background: incCount === n ? phase.color : "#0F0F13",
-                  color: incCount === n ? "#0F0F13" : "#F0EEF6",
-                  border: `1px solid ${incCount === n ? phase.color : "#2A2A35"}`,
-                  borderRadius: 8,
-                  padding: "5px 11px",
-                  fontWeight: 700,
-                  fontSize: 12,
-                  cursor: "pointer",
-                }}
-              >
-                {n === 0 ? "0" : `+${n}`}
-              </button>
-            ))}
-          </div>
-
-          {isEditing ? (
-            <div style={styles.editRow}>
-              <span style={styles.editLabel}>Nouveau poids (3×8) :</span>
-              <input
-                style={styles.editInput}
-                type="number"
-                step="0.5"
-                value={editingEx.value}
-                onChange={e => setEditingEx(prev => ({ ...prev, value: e.target.value }))}
-                autoFocus
-              />
-              <button style={styles.editBtn(true)} onClick={commitEdit}>✓</button>
-              <button style={styles.editBtn(false)} onClick={() => setEditingEx(null)}>✕</button>
-            </div>
-          ) : (
-            <button style={styles.updateBtn} onClick={() => startEdit(ex.id, userWeight)}>
-              ✏️ Mettre à jour mon poids
-            </button>
-          )}
-        </div>
-      );
-    }
-
-    // Default rendering (unchanged)
-    const phaseWeight = calcWeight(userWeight, phaseIdx);
+    // Default rendering
+    const phaseWeight = calcWeight(userWeight, effectivePhaseIdx);
     const totalDisplay = ex.machineWeight
       ? `${phaseWeight} + ${machineW}${ex.id === "d1e2" || ex.id === "d4e3" ? " kg/côté" : " kg"} machine`
       : null;
@@ -1047,26 +1109,40 @@ export default function FitnessApp() {
         <div style={styles.dayCard}>
           <div style={styles.dayTitle}>{day.name}</div>
           <div style={styles.dayMuscles}>{day.muscles}</div>
-          {day.exercises.map(renderExercise)}
+          {overloadSuggestionFor(selectedDay) && renderOverloadBanner(selectedDay)}
+          {day.exercises.map(ex => renderExercise(getExerciseDef(ex)))}
         </div>
       </div>
     );
   }
 
   function renderProgram() {
+    if (programMode === "fixed3x8") {
+      return (
+        <div>
+          <div style={{ padding: "20px 20px 0", fontSize: 20, fontWeight: 800 }}>
+            Mode fixe — 3×8
+          </div>
+          <div style={{ margin: "16px 20px 0", fontSize: 13, color: "#9997A8", lineHeight: 1.6, background: "#1A1A25", border: "1px solid #2A2A35", borderRadius: 12, padding: "16px" }}>
+            Pas de périodisation active : chaque exercice reste à son poids et ses reps de base (3×8 pour les poly). Change ça dans Réglages → Programme d'entraînement.
+          </div>
+        </div>
+      );
+    }
+
+    const remaining = remainingByDay();
     return (
       <div>
         <div style={{ padding: "20px 20px 0", fontSize: 20, fontWeight: 800 }}>
-          Cycle 12 semaines
+          Cycle par séances ({cyclesCompleted} cycle{cyclesCompleted > 1 ? "s" : ""} complété{cyclesCompleted > 1 ? "s" : ""})
         </div>
         <div style={{ padding: "6px 20px 0", fontSize: 13, color: "#9997A8" }}>
-          Débute le {formatDate(new Date(cycleStart))}
+          Une phase change quand chaque jour a été fait {sessionsPerPhase}× — pas de date fixe
         </div>
+
         <div style={styles.phaseGrid}>
           {PHASES.map((p, i) => {
             const active = i === phaseIdx;
-            const compound = [15, 12, 8, 5];
-            const isolation = [20, 15, 12, 10];
             return (
               <div key={p.id} style={styles.phaseCard(p, active)}>
                 <div style={{ fontSize: 20, marginBottom: 4 }}>{p.emoji}</div>
@@ -1074,19 +1150,13 @@ export default function FitnessApp() {
                 <div style={styles.phaseCardDetail}>
                   {Math.round(p.pct * 100)}% du max
                 </div>
-                <div style={{ ...styles.phaseCardDetail, marginTop: 4 }}>
-                  Poly : 3×{compound[i]} · Iso : 3×{isolation[i]}
-                </div>
-                <div style={{ ...styles.phaseCardDetail, marginTop: 4 }}>
-                  Semaines {i * 3 + 1}–{i * 3 + 3}
-                </div>
                 {active && (
                   <div style={{
                     marginTop: 8, fontSize: 11, fontWeight: 700,
                     color: p.color, background: p.color + "22",
                     borderRadius: 6, padding: "3px 8px", display: "inline-block"
                   }}>
-                    ← EN COURS sem. {weekInPhase}/3
+                    ← EN COURS
                   </div>
                 )}
               </div>
@@ -1094,7 +1164,29 @@ export default function FitnessApp() {
           })}
         </div>
 
-        <div style={{ margin: "20px 20px 0", fontSize: 13, color: "#9997A8", lineHeight: 1.6 }}>
+        <div style={styles.settingsSection}>
+          <div style={styles.settingsTitle}>Progression vers la prochaine phase</div>
+          <div style={{ background: "#1A1A25", border: "1px solid #2A2A35", borderRadius: 12, padding: "14px 16px" }}>
+            {DAYS.map((d, i) => {
+              const done = Math.min(sessionsPerPhase, phaseSessionCounts[i] || 0);
+              return (
+                <div key={d.id} style={{ marginBottom: 10 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 4 }}>
+                    <span>{d.name}</span>
+                    <span style={{ color: done >= sessionsPerPhase ? phase.color : "#9997A8" }}>
+                      {done}/{sessionsPerPhase} {done >= sessionsPerPhase ? "✓" : ""}
+                    </span>
+                  </div>
+                  <div style={{ height: 6, background: "#0F0F13", borderRadius: 3, overflow: "hidden" }}>
+                    <div style={{ height: "100%", width: `${(done / sessionsPerPhase) * 100}%`, background: phase.color, borderRadius: 3 }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div style={{ margin: "16px 20px 0", fontSize: 13, color: "#9997A8", lineHeight: 1.6 }}>
           <strong style={{ color: "#F0EEF6" }}>Comment ça marche</strong><br />
           Ton poids de référence (3×8) correspond à ~80% de ton max. L'app recalcule automatiquement les poids pour chaque phase. Mets à jour ton poids de base quand tu progresses.
         </div>
@@ -1103,27 +1195,125 @@ export default function FitnessApp() {
   }
 
   function renderSettings() {
+    const chip = (active) => ({
+      background: active ? phase.color : "#0F0F13",
+      color: active ? "#0F0F13" : "#F0EEF6",
+      border: `1px solid ${active ? phase.color : "#2A2A35"}`,
+      borderRadius: 8,
+      padding: "6px 12px",
+      fontWeight: 700,
+      fontSize: 12,
+      cursor: "pointer",
+    });
+
     return (
       <div>
         <div style={{ padding: "20px 20px 0", fontSize: 20, fontWeight: 800 }}>
           Réglages
         </div>
 
+        {programMode !== "fixed3x8" && (
+          <div style={styles.settingsSection}>
+            <div style={styles.settingsTitle}>Prochain changement de phase</div>
+            <div style={styles.settingsCard}>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 600 }}>
+                  Encore {totalRemaining()} séance{totalRemaining() > 1 ? "s" : ""}
+                </div>
+                <div style={{ fontSize: 12, color: "#9997A8", marginTop: 2 }}>
+                  → Phase {PHASES[(phaseIdx + 1) % 4].name} (estimation ~{formatDate(nextDate)})
+                </div>
+              </div>
+              <a href={getCalendarUrl()} target="_blank" rel="noreferrer" style={styles.calBtn}>
+                📅 Estimation
+              </a>
+            </div>
+          </div>
+        )}
+
         <div style={styles.settingsSection}>
-          <div style={styles.settingsTitle}>Rappel changement de phase</div>
+          <div style={styles.settingsTitle}>Programme d'entraînement</div>
+          <div style={{ background: "#1A1A25", border: "1px solid #2A2A35", borderRadius: 12, padding: "14px 16px" }}>
+            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Mode</div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button style={chip(programMode === "periodized")} onClick={() => setProgramMode("periodized")}>
+                Périodisé (4 phases)
+              </button>
+              <button style={chip(programMode === "fixed3x8")} onClick={() => setProgramMode("fixed3x8")}>
+                Fixe 3×8
+              </button>
+            </div>
+            {programMode === "periodized" && (
+              <div style={{ marginTop: 14 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>
+                  Séances par jour avant de changer de phase
+                </div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  {[2, 3, 4].map(n => (
+                    <button key={n} style={chip(sessionsPerPhase === n)} onClick={() => setSessionsPerPhase(n)}>
+                      {n}× ({n * 5} séances)
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div style={{ fontSize: 11, color: "#9997A8", marginTop: 12, lineHeight: 1.5 }}>
+              Changer de mode ne supprime aucune donnée ni statistique.
+            </div>
+          </div>
+        </div>
+
+        <div style={styles.settingsSection}>
+          <div style={styles.settingsTitle}>Mes exercices</div>
+          {DAYS.map(d => (
+            <div key={d.id} style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: phase.color, marginBottom: 6 }}>{d.name}</div>
+              {d.exercises.map(baseEx => {
+                const ex = getExerciseDef(baseEx);
+                return (
+                  <div key={ex.id} style={{ background: "#1A1A25", border: "1px solid #2A2A35", borderRadius: 12, padding: "10px 12px", marginBottom: 8 }}>
+                    <input
+                      style={{ ...styles.editInput, width: "100%", textAlign: "left", marginBottom: 8, boxSizing: "border-box", border: "1px solid #2A2A35" }}
+                      value={ex.name}
+                      onChange={e => updateExerciseOverride(ex.id, { name: e.target.value })}
+                    />
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      <button style={chip(ex.type === "compound")} onClick={() => updateExerciseOverride(ex.id, { type: "compound" })}>POLY</button>
+                      <button style={chip(ex.type === "isolation")} onClick={() => updateExerciseOverride(ex.id, { type: "isolation" })}>ISO</button>
+                      <button style={chip(!!ex.bodyweightBased)} onClick={() => updateExerciseOverride(ex.id, { bodyweightBased: !ex.bodyweightBased })}>
+                        {ex.bodyweightBased ? "Poids du corps ± lest/aide ✓" : "Poids du corps ± lest/aide"}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+
+        <div style={styles.settingsSection}>
+          <div style={styles.settingsTitle}>Mes données</div>
           <div style={styles.settingsCard}>
             <div>
-              <div style={{ fontSize: 14, fontWeight: 600 }}>Prochain changement</div>
-              <div style={{ fontSize: 13, color: "#9997A8", marginTop: 2 }}>
-                {formatDate(nextDate)} — dans {daysUntilNext()} jours
-              </div>
-              <div style={{ fontSize: 12, color: "#9997A8" }}>
-                → Phase {PHASES[(phaseIdx + 1) % 4].name}
-              </div>
+              <div style={{ fontSize: 14, fontWeight: 600 }}>Sauvegarde</div>
+              <div style={{ fontSize: 12, color: "#9997A8", marginTop: 2 }}>Pour changer d'appareil ou garder une copie</div>
             </div>
-            <a href={getCalendarUrl()} target="_blank" rel="noreferrer" style={styles.calBtn}>
-              📅 Ajouter
-            </a>
+            <button style={styles.calBtn} onClick={exportData}>⬇️ Télécharger</button>
+          </div>
+          <div style={styles.settingsCard}>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 600 }}>Restaurer</div>
+              <div style={{ fontSize: 12, color: "#9997A8", marginTop: 2 }}>Remplace les données de cet appareil</div>
+            </div>
+            <label style={{ ...styles.pauseBtn, display: "inline-block" }}>
+              ⬆️ Importer
+              <input
+                type="file"
+                accept="application/json,.json"
+                style={{ display: "none" }}
+                onChange={e => { if (e.target.files[0]) importData(e.target.files[0]); }}
+              />
+            </label>
           </div>
         </div>
 
@@ -1136,7 +1326,7 @@ export default function FitnessApp() {
               </div>
               <div style={{ fontSize: 13, color: "#9997A8", marginTop: 2 }}>
                 {pauseActive
-                  ? `Reprends quand tu es prêt — le cycle t'attendra`
+                  ? "Reprends quand tu es prêt — la phase n'avance qu'avec tes séances"
                   : "Vacances, blessure, voyage…"}
               </div>
             </div>
@@ -1156,27 +1346,14 @@ export default function FitnessApp() {
           <div style={styles.settingsTitle}>Cycle</div>
           <div style={styles.settingsCard}>
             <div>
-              <div style={{ fontSize: 14, fontWeight: 600 }}>Redémarrer le cycle</div>
+              <div style={{ fontSize: 14, fontWeight: 600 }}>Revenir à la phase Endurance</div>
               <div style={{ fontSize: 13, color: "#9997A8", marginTop: 2 }}>
-                Recommencer à la phase Endurance
+                Tes stats et poids sont conservés
               </div>
             </div>
             <button style={styles.dangerBtn} onClick={resetCycle}>
               Reset
             </button>
-          </div>
-        </div>
-
-        <div style={styles.settingsSection}>
-          <div style={styles.settingsTitle}>Légende</div>
-          <div style={{ background: "#1A1A25", border: "1px solid #2A2A35", borderRadius: 12, padding: "14px 16px" }}>
-            <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-              <span style={styles.exType("compound")}>POLY = Polyarticulaire</span>
-              <span style={styles.exType("isolation")}>ISO = Isolation</span>
-            </div>
-            <div style={{ fontSize: 12, color: "#9997A8", marginTop: 10, lineHeight: 1.6 }}>
-              Les exercices poly (squat, traction, développé…) sont périodisés agressivement. Les exercices d'isolation restent sur des reps plus élevées pour protéger les articulations.
-            </div>
           </div>
         </div>
       </div>
@@ -1333,6 +1510,77 @@ export default function FitnessApp() {
           </div>
         </div>
 
+        {/* Weight progression */}
+        {(() => {
+          const allEx = DAYS.flatMap(d => d.exercises.map(getExerciseDef));
+          const nameOf = (id) => (allEx.find(e => e.id === id) || {}).name || id;
+          const sorted = [...weightHistory].sort((a, b) => new Date(a.date) - new Date(b.date));
+          const idsWithHistory = [...new Set(sorted.map(h => h.exId))];
+
+          // Global index: average % change vs each exercise's first recorded value
+          const firstVal = {}; const cur = {}; const globalPts = [];
+          sorted.forEach(h => {
+            if (firstVal[h.exId] == null) firstVal[h.exId] = h.oldVal;
+            cur[h.exId] = h.newVal;
+            const ratios = Object.keys(cur).map(id => (cur[id] / firstVal[id] - 1) * 100);
+            globalPts.push(ratios.reduce((a, b) => a + b, 0) / ratios.length);
+          });
+          const globalShown = globalPts.slice(-10);
+          const gMax = Math.max(1, ...globalShown.map(Math.abs));
+
+          const selId = statsExId && idsWithHistory.includes(statsExId) ? statsExId : idsWithHistory[0];
+          const exHist = sorted.filter(h => h.exId === selId);
+          const exPts = exHist.length ? [{ date: null, v: exHist[0].oldVal }, ...exHist.map(h => ({ date: h.date, v: h.newVal }))] : [];
+          const exShown = exPts.slice(-10);
+          const eMin = Math.min(...exShown.map(p => p.v));
+          const eMax = Math.max(...exShown.map(p => p.v));
+
+          return (
+            <div style={styles.settingsSection}>
+              <div style={styles.settingsTitle}>Progression des charges</div>
+              {sorted.length === 0 ? (
+                <div style={{ background: "#1A1A25", border: "1px solid #2A2A35", borderRadius: 12, padding: "14px 16px", fontSize: 13, color: "#9997A8", lineHeight: 1.5 }}>
+                  Chaque fois que tu modifies un poids (ou acceptes une augmentation suggérée), il est daté ici. Les modifications passées ne sont pas récupérables : le suivi commence à partir de maintenant.
+                </div>
+              ) : (
+                <>
+                  <div style={{ background: "#1A1A25", border: "1px solid #2A2A35", borderRadius: 12, padding: "14px 16px", marginBottom: 10 }}>
+                    <div style={{ fontSize: 12, color: "#9997A8", marginBottom: 10 }}>Global (variation moyenne des charges)</div>
+                    <div style={{ display: "flex", alignItems: "flex-end", gap: 6, height: 70 }}>
+                      {globalShown.map((v, i) => (
+                        <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+                          <div style={{ width: "100%", height: `${Math.max(4, (Math.abs(v) / gMax) * 52)}px`, background: v >= 0 ? phase.color : "#FF6B6B", borderRadius: 4 }} />
+                          <span style={{ fontSize: 9, color: "#9997A8" }}>{v > 0 ? "+" : ""}{v.toFixed(1)}%</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div style={{ background: "#1A1A25", border: "1px solid #2A2A35", borderRadius: 12, padding: "14px 16px" }}>
+                    <select style={styles.select} value={selId} onChange={e => setStatsExId(e.target.value)}>
+                      {idsWithHistory.map(id => <option key={id} value={id}>{nameOf(id)}</option>)}
+                    </select>
+                    <div style={{ display: "flex", alignItems: "flex-end", gap: 6, height: 80 }}>
+                      {exShown.map((pt, i) => (
+                        <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+                          <div style={{
+                            width: "100%",
+                            height: `${eMax === eMin ? 40 : 16 + ((pt.v - eMin) / (eMax - eMin)) * 44}px`,
+                            background: i === exShown.length - 1 ? phase.color : "#2A2A35",
+                            borderRadius: 4,
+                          }} />
+                          <span style={{ fontSize: 9, color: "#9997A8" }}>{pt.v}</span>
+                          <span style={{ fontSize: 8, color: "#6B6980" }}>{pt.date ? new Date(pt.date).toLocaleDateString("fr-FR", { day: "numeric", month: "numeric" }) : "départ"}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          );
+        })()}
+
         {/* Body weight */}
         <div style={styles.settingsSection}>
           <div style={styles.settingsTitle}>Poids corporel</div>
@@ -1394,23 +1642,27 @@ export default function FitnessApp() {
           <div>
             <div style={styles.phaseName}>{phase.name}</div>
             <div style={styles.phaseInfo}>
-              Semaine {weekInPhase}/3 · {Math.round(phase.pct * 100)}% du max
+              {programMode === "fixed3x8"
+                ? `Mode fixe · ${Math.round(phase.pct * 100)}% du max`
+                : `${5 * sessionsPerPhase - totalRemaining()}/${5 * sessionsPerPhase} séances · ${Math.round(phase.pct * 100)}% du max`}
             </div>
           </div>
         </div>
         <div style={styles.progressRow}>
           {[0, 1, 2, 3].map(i => (
-            <div key={i} style={styles.progressDot(i <= phaseIdx, phase.color)} />
+            <div key={i} style={styles.progressDot(i <= effectivePhaseIdx, phase.color)} />
           ))}
         </div>
-        <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-          {[0, 1, 2].map(i => (
-            <div key={i} style={{
-              flex: 1, height: 3, borderRadius: 2,
-              background: i < weekInPhase ? phase.color : "#2A2A35"
-            }} />
-          ))}
-        </div>
+        {programMode !== "fixed3x8" && (
+          <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+            {[0, 1, 2, 3, 4].map(i => (
+              <div key={i} style={{
+                flex: 1, height: 3, borderRadius: 2,
+                background: (phaseSessionCounts[i] || 0) >= sessionsPerPhase ? phase.color : "#2A2A35"
+              }} />
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Week Tracker */}
@@ -1466,19 +1718,16 @@ export default function FitnessApp() {
       )}
 
       {/* Next phase alert */}
-      {!pauseActive && (
+      {!pauseActive && programMode !== "fixed3x8" && (
         <div style={styles.nextAlert}>
           <div>
             <div style={{ fontSize: 13, fontWeight: 600 }}>
-              Prochain changement dans <strong style={{ color: phase.color }}>{daysUntilNext()} jours</strong>
+              Prochain changement dans <strong style={{ color: phase.color }}>{totalRemaining()} séance{totalRemaining() > 1 ? "s" : ""}</strong>
             </div>
             <div style={{ fontSize: 12, color: "#9997A8" }}>
-              {formatDate(nextDate)} → {PHASES[(phaseIdx + 1) % 4].name}
+              → {PHASES[(phaseIdx + 1) % 4].name}
             </div>
           </div>
-          <a href={getCalendarUrl()} target="_blank" rel="noreferrer" style={styles.calBtn}>
-            📅 Rappel
-          </a>
         </div>
       )}
 
