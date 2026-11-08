@@ -1257,6 +1257,55 @@ export default function FitnessApp() {
                 </div>
               </div>
             )}
+            {programMode === "periodized" && (
+              <div style={{ marginTop: 14 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Phase actuelle</div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  {PHASES.map((p, i) => (
+                    <button
+                      key={p.id}
+                      style={chip(phaseIdx === i)}
+                      onClick={() => {
+                        if (phaseIdx !== i) {
+                          setPhaseIdx(i);
+                          setPhaseSessionCounts({ 0: 0, 1: 0, 2: 0, 3: 0, 4: 0 });
+                        }
+                      }}
+                    >
+                      {p.name}
+                    </button>
+                  ))}
+                </div>
+                <div style={{ fontSize: 13, fontWeight: 600, margin: "14px 0 8px" }}>
+                  Séances déjà faites dans cette phase
+                </div>
+                {DAYS.map((d, i) => (
+                  <div key={d.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                    <span style={{ fontSize: 13 }}>{d.name}</span>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <button
+                        style={chip(false)}
+                        onClick={() => setPhaseSessionCounts(prev => ({ ...prev, [i]: Math.max(0, (prev[i] || 0) - 1) }))}
+                      >
+                        −
+                      </button>
+                      <span style={{ fontSize: 14, fontWeight: 700, minWidth: 34, textAlign: "center" }}>
+                        {phaseSessionCounts[i] || 0}/{sessionsPerPhase}
+                      </span>
+                      <button
+                        style={chip(false)}
+                        onClick={() => setPhaseSessionCounts(prev => ({ ...prev, [i]: Math.min(sessionsPerPhase, (prev[i] || 0) + 1) }))}
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                <div style={{ fontSize: 11, color: "#9997A8", marginTop: 8, lineHeight: 1.5 }}>
+                  Ajuste uniquement le suivi de phase : aucune séance n'est ajoutée à tes statistiques.
+                </div>
+              </div>
+            )}
             <div style={{ fontSize: 11, color: "#9997A8", marginTop: 12, lineHeight: 1.5 }}>
               Changer de mode ne supprime aucune donnée ni statistique.
             </div>
